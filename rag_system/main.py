@@ -25,11 +25,22 @@ from rag_system.utils.ollama_client import OllamaClient
 # ============================================================================
 # All model configurations are centralized here to prevent conflicts
 
+# LLM Backend Configuration
+LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama")
+
 # Ollama Models Configuration (for inference via Ollama)
 OLLAMA_CONFIG = {
     "host": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
     "generation_model": "qwen3:8b",  # Main text generation model
     "enrichment_model": "qwen3:0.6b",  # Lightweight model for routing/enrichment
+}
+
+WATSONX_CONFIG = {
+    "api_key": os.getenv("WATSONX_API_KEY", ""),
+    "project_id": os.getenv("WATSONX_PROJECT_ID", ""),
+    "url": os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com"),
+    "generation_model": os.getenv("WATSONX_GENERATION_MODEL", "ibm/granite-13b-chat-v2"),
+    "enrichment_model": os.getenv("WATSONX_ENRICHMENT_MODEL", "ibm/granite-8b-japanese"),  # Lightweight model
 }
 
 # External Model Configuration (HuggingFace models used directly)
@@ -165,8 +176,27 @@ def get_agent(mode: str = "default") -> Agent:
     """
     load_dotenv()
     
-    # Initialize the Ollama client with the host from config
-    llm_client = OllamaClient(host=OLLAMA_CONFIG["host"])
+    # Initialize the appropriate LLM client based on backend configuration
+    if LLM_BACKEND.lower() == "watsonx":
+        from rag_system.utils.watsonx_client import WatsonXClient
+        
+        if not WATSONX_CONFIG["api_key"] or not WATSONX_CONFIG["project_id"]:
+            raise ValueError(
+                "Watson X configuration incomplete. Please set WATSONX_API_KEY and WATSONX_PROJECT_ID "
+                "environment variables."
+            )
+        
+        llm_client = WatsonXClient(
+            api_key=WATSONX_CONFIG["api_key"],
+            project_id=WATSONX_CONFIG["project_id"],
+            url=WATSONX_CONFIG["url"]
+        )
+        llm_config = WATSONX_CONFIG
+        print(f"🔧 Using Watson X backend with granite models")
+    else:
+        llm_client = OllamaClient(host=OLLAMA_CONFIG["host"])
+        llm_config = OLLAMA_CONFIG
+        print(f"🔧 Using Ollama backend")
     
     # Get the configuration for the specified mode
     config = PIPELINE_CONFIGS.get(mode, PIPELINE_CONFIGS['default'])
@@ -174,7 +204,7 @@ def get_agent(mode: str = "default") -> Agent:
     agent = Agent(
         pipeline_configs=config, 
         llm_client=llm_client, 
-        ollama_config=OLLAMA_CONFIG
+        ollama_config=llm_config
     )
     return agent
 

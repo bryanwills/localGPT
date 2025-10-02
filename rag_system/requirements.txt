@@ -14,3 +14,4 @@ sentencepiece
 accelerate
 docling
 ocrmac
+ibm-watsonx-ai>=1.3.39
